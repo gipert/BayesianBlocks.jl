@@ -3,48 +3,49 @@
 using StatsBase, ProgressMeter
 
 """
-    bayesian_blocks(data, logfitness=:cash, logprior=:p0, [gamma=0.01, p0=0.01])
+    partition(data, logfitness=:cash, logprior=:p0, progress=false, ...)
 
 Return an array of optimal change points for a set of one-dimensional data. This
 is the implementation of the bayesian blocks algorithm, as outlined in [^1].
 
-## Arguments
- * `data`: numeric array or a `StatsBase.Histogram`
- * `logfitness`: log of the block fitness function to be used, choose between
-                 [:cash]
- * `logprior`: log of the prior distribution on the number of blocks to be used,
-               choose between [:gamma, :p0]
- * `gamma`, `p0`...: set the parameter value for the specified prior distribution
+# Arguments
+- `data`: numeric array or a `StatsBase.Histogram`
+- `logfitness`: log of the block fitness function to be used, choose between
+  [:cash]
+- `logprior`: log of the prior distribution on the number of blocks to be used,
+   choose between [:gamma, :p0]
+- `gamma`, `p0`...: set the parameter value for the specified prior distribution
+- `progress`: display a progress bar for long computations
 
-## Example
+# Example
 ```julia
 using Distributions, StatsBase, Plots, LinearAlgebra
 
 data = vcat(rand(Normal(0),1000),rand(Cauchy(5),1000))
 data = data[(data .> -5) .& (data .< 10)]
 
-h = fit(Histogram, gerda, -5:100:10, closed = :left)
+h = fit(Histogram, data, -5:0.1:10)
 
 # choose to use all data or an histogram of it!
-hb = normalize(fit(Histogram, data, bayesian_blocks(data), closed = :left))
-hb = normalize(fit(Histogram, data, bayesian_blocks(h),    closed = :left))
+hb = fit(Histogram, data, BayesianBlocks.partition(data))
+hb = fit(Histogram, data, BayesianBlocks.partition(h))
 
-plot(data, st = :stephist, normalized = true, nbins=1000)
-plot!(hb, st = :step, w = 3)
+plot(data, normalized=true, st=:stephist, nbins=1000)
+plot!(normalize(hb), st=:step, w = 3)
 ```
 
-### Performance tips
+## Performance tips
 You can convert your data container to a less precise representation to improve
 the performance a bit, e.g.
 ```julia
 x::Array{Float32} = [1.1, π, (√5-1)/2]
 ```
 
-[^1]: Scargle, J et al. (2012) [https://arxiv.org/abs/1207.5578]
+[^1]: Scargle, J et al. (2012) [https://doi.org/10.1088/0004-637X/764/2/167]
 """
-function bayesian_blocks(x;
-                         logfitness::Symbol=:cash, logprior::Symbol=:p0,
-                         gamma=0.01, p0=0.01)
+function partition(x;
+                   logfitness::Symbol=:cash, logprior::Symbol=:p0,
+                   gamma=0.01, p0=0.01, progress::Bool=false)
 
     if typeof(x) <: Array{<:Real,1}
         # take care of repeated data
@@ -107,11 +108,11 @@ function bayesian_blocks(x;
 
     # display progress bar for long computations
     # total number of steps: ∑n(n-1) = N(N^2-1)/3
-    p = Progress(Integer(N*(N^2-1)/3), 2); m = 0
+    p = Progress(Int64(N*(N^2-1)/3), 2); m = 0
 
     for k in 1:N
         # define nice alias to mimic the notation used in [^1]
-        F(r) = logf_dict[logfitness](cumsum(x_weight[r:k])[end], edges[k+1] - edges[r]) + ncp_prior
+        F(r) = logf_dict[logfitness](cumsum(x_weight[r:k])[end], edges[k+1]-edges[r]) + ncp_prior
 
         # compute all possible configurations (Eq. (8) in [^1])
         A = [F(r) + (r == 1 ? 0 : best[r-1]) for r in 1:k]
@@ -120,7 +121,7 @@ function bayesian_blocks(x;
         push!(last, argmax(A))
         push!(best, maximum(A))
 
-        update!(p, m += k*(k-1))
+        progress && update!(p, m += k*(k-1))
     end
 
     # extract changepoints by iteratively peeling off the last block

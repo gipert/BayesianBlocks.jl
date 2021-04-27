@@ -1,0 +1,11 @@
+name = "BayesianBlocks"
+uuid = "69d15733-bbfe-49f8-b5d2-44af9c5bf4fb"
+authors = ["Luigi Pertoldi <gipert@pm.me>"]
+version = "0.1.0"
+
+[deps]
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+julia = "1"

@@ -7,6 +7,13 @@ using Test
 
 data = readdlm("data/test.dat")[:,1]
 
+@test_throws MethodError BayesianBlocks.partition(fit(Histogram{Float64}, data), progress=true)
+
+edges = BayesianBlocks.partition(data, progress=true)
+@test edges ≈ [-3.48528, -1.87114, -1.36282, -0.677218,
+              0.659105, 1.39771, 4.06582, 5.60912,
+              6.17286, 7.76634, 9.91696 ] atol = 1E-04
+
 edges = BayesianBlocks.partition(data, logfitness=:cash, logprior=:p0, p0=0.01)
 @test edges ≈ [-3.48528, -1.87114, -1.36282, -0.677218,
               0.659105, 1.39771, 4.06582, 5.60912,

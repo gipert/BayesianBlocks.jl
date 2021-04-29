@@ -5,8 +5,9 @@ using StatsBase, ProgressMeter
 """
     partition(data, logfitness=:cash, logprior=:p0, progress=false, ...)
 
-Return an array of optimal change points for a set of one-dimensional data. This
-is the implementation of the bayesian blocks algorithm, as outlined in [^1].
+Return an array of optimal change points for a set of one-dimensional data
+(observations or an histogram of them). This is the implementation of the
+bayesian blocks algorithm, as outlined in [^1].
 
 # Arguments
 - `data`: numeric array or a `StatsBase.Histogram`
@@ -43,34 +44,38 @@ x::Array{Float32} = [1.1, π, (√5-1)/2]
 
 [^1]: Scargle, J et al. (2012) [https://doi.org/10.1088/0004-637X/764/2/167]
 """
-function partition(x;
+function partition(x::Vector{<:Real}; kwargs...)
+    # take care of repeated data
+    x_sorted = sort(x)
+    x_unique = [x_sorted[1]]
+    x_weight::Vector{Int32} = [1]
+    for i in 2:length(x_sorted)
+        if x_sorted[i] == x_sorted[i-1]
+            x_weight[end] += 1
+        else
+            push!(x_unique, x_sorted[i])
+            push!(x_weight, 1)
+        end
+    end
+
+    partition(x_unique, x_weight; kwargs...)
+end
+
+function partition(h::Histogram{<:Integer,1}; kwargs...)
+    v = collect(h.edges[1])
+    x_unique = [0.5 * (v[i] + v[i+1]) for i in 1:length(v) - 1]
+    x_weight::Vector{Int32} = h.weights
+
+    # delete empty bins
+    deleteat!(x_unique, findall(iszero, x_weight))
+    deleteat!(x_weight, findall(iszero, x_weight))
+
+    partition(x_unique, x_weight; kwargs...)
+end
+
+function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
                    logfitness::Symbol=:cash, logprior::Symbol=:p0,
                    gamma=0.01, p0=0.01, progress::Bool=false)
-
-    if typeof(x) <: Array{<:Real,1}
-        # take care of repeated data
-        x_sorted = sort(x)
-        x_unique = [x_sorted[1]]
-        x_weight::Array{Int32} = [1]
-        for i in 2:length(x_sorted)
-            if x_sorted[i] == x_sorted[i-1]
-                x_weight[end] += 1
-            else
-                push!(x_unique, x_sorted[i])
-                push!(x_weight, 1)
-            end
-        end
-    elseif typeof(x) <: Histogram{<:Integer,1}
-        v = collect(x.edges[1])
-        x_unique = [0.5 * (v[i] + v[i+1]) for i in 1:length(v) - 1]
-        x_weight = x.weights
-
-        # delete empty bins
-        deleteat!(x_unique, findall(iszero, x_weight))
-        deleteat!(x_weight, findall(iszero, x_weight))
-    else
-        error("Unsupported input type: $(typeof(x))")
-    end
 
     # final number of data points
     N = length(x_unique)
@@ -103,12 +108,17 @@ function partition(x;
                  x_unique[end])
 
     # see Sec. 2.6 in [^1]
-    best = Number[]
-    last = Number[]
+    best = Vector{Float32}()
+    last = Vector{Int32}()
 
     # display progress bar for long computations
     # total number of steps: ∑n(n-1) = N(N^2-1)/3
-    p = Progress(Int64(N*(N^2-1)/3), 2); m = 0
+    if progress && Sys.WORD_SIZE == 32
+        @warn "Progress bar not supported on 32-bit Julia, disabling"
+        progress = false
+    elseif progress
+        p = Progress(UInt(N*(N^2-1)/3), 2); m = 0
+    end
 
     for k in 1:N
         # define nice alias to mimic the notation used in [^1]
@@ -125,7 +135,7 @@ function partition(x;
     end
 
     # extract changepoints by iteratively peeling off the last block
-    cp = Number[]
+    cp = Vector{Int32}()
     i = N+1
     while i != 0
         push!(cp, i)

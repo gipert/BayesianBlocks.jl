@@ -101,7 +101,7 @@ function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
 
     # array of (all possible) block edges
     edges = vcat(x_unique[1],
-                 0.5f0(x_unique[1:end-1]+x_unique[2:end]),
+                 (x_unique[1:end-1] .+ x_unique[2:end]) ./ 2,
                  x_unique[end])
 
     # cumulative counts: cumw[k+1] - cumw[r] is the number of events in the

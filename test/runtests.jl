@@ -1,7 +1,10 @@
 # This file is a part of BayesianBlocks.jl, licensed under the MIT License (MIT).
 
-import Test
+using Test
+using Aqua
+using BayesianBlocks
 
-Test.@testset "Package BayesianBlocks" begin
+@testset "Package BayesianBlocks" begin
+    Aqua.test_all(BayesianBlocks)
     include("test.jl")
 end # testset

@@ -32,3 +32,9 @@ edges = BayesianBlocks.partition(fit(Histogram, data, nbins=100, closed = :left)
 edges = BayesianBlocks.partition(fit(Histogram, data, nbins=100, closed = :left),
                         logfitness=:cash, logprior=:gamma, gamma=0.01)
 @test edges ≈ [-3.5, -3.1, -1.8, -1.2, -0.4, 0.4, 1.4, 3.6, 4.2, 5.6, 6.2, 7.8, 9.9]
+
+# integer data must keep its full precision
+t = collect(1_000_000_000:1_000_000_100)
+edges = BayesianBlocks.partition(t)
+@test eltype(edges) == Float64
+@test edges == [1_000_000_000, 1_000_000_100]

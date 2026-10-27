@@ -7,20 +7,26 @@
 [![Codecov](https://codecov.io/gh/gipert/BayesianBlocks.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/gipert/BayesianBlocks.jl)
 
 ## Usage
-```
-julia> ]add BayesianBlocks
+```julia
+using BayesianBlocks, StatsBase
 
-julia> using BayesianBlocks
+data = randn(1000)
 
-julia> ?BayesianBlocks.partition
-[...]
+# optimal block edges from the individual events...
+edges = BayesianBlocks.partition(data)
+
+# ...or from a histogram of them
+edges = BayesianBlocks.partition(fit(Histogram, data))
+
+# the edges define a variable-width histogram
+hb = fit(Histogram, data, edges)
 ```
 
 ## Documentation
 
 * [Documentation for stable version](https://gipert.github.io/BayesianBlocks.jl/stable)
 * [Documentation for development version](https://gipert.github.io/BayesianBlocks.jl/dev)
-* Scargle, J et al. (2012) https://doi.org/10.1088/0004-637X/764/2/167
+* Scargle, J. D. et al. (2013), ApJ 764, 167, https://doi.org/10.1088/0004-637X/764/2/167
 
 ## Related
 Not a Julia user? Check out this header-only C++ implementation: https://github.com/gipert/bayesian-blocks

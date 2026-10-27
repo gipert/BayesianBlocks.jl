@@ -27,14 +27,26 @@ edges = BayesianBlocks.partition(data, logfitness=:cash, logprior=:gamma, gamma=
 
 edges = BayesianBlocks.partition(fit(Histogram, data, nbins=100, closed = :left),
                         logfitness=:cash, logprior=:p0, p0=0.01)
-@test edges ≈ [-3.5, -3.1, -1.8, -1.2, -0.4, 0.4, 1.4, 3.6, 4.2, 5.6, 6.2, 7.8, 9.9]
+@test edges ≈ [-3.6, -3.0, -1.8, -1.2, -0.4, 0.4, 1.4, 3.6, 4.2, 5.6, 6.2, 7.8, 10.0]
 
 edges = BayesianBlocks.partition(fit(Histogram, data, nbins=100, closed = :left),
                         logfitness=:cash, logprior=:gamma, gamma=0.01)
-@test edges ≈ [-3.5, -3.1, -1.8, -1.2, -0.4, 0.4, 1.4, 3.6, 4.2, 5.6, 6.2, 7.8, 9.9]
+@test edges ≈ [-3.6, -3.0, -1.8, -1.2, -0.4, 0.4, 1.4, 3.6, 4.2, 5.6, 6.2, 7.8, 10.0]
 
 # integer data must keep its full precision
 t = collect(1_000_000_000:1_000_000_100)
 edges = BayesianBlocks.partition(t)
 @test eltype(edges) == Float64
 @test edges == [1_000_000_000, 1_000_000_100]
+
+# returned edges are histogram bin edges, so re-binning loses no events
+h = fit(Histogram, data, nbins=100, closed = :left)
+edges = BayesianBlocks.partition(h)
+@test all(e -> any(isapprox(e), h.edges[1]), edges)
+@test sum(fit(Histogram, data, edges).weights) == length(data)
+
+# the input histogram is left untouched, also when its weights are not copied
+h32 = fit(Histogram{Int32}, data, -4:0.1:10)
+w = copy(h32.weights)
+BayesianBlocks.partition(h32)
+@test h32.weights == w

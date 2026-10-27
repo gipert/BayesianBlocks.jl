@@ -48,7 +48,7 @@ function partition(x::Vector{<:Real}; kwargs...)
     # take care of repeated data
     x_sorted = sort(x)
     x_unique = [x_sorted[1]]
-    x_weight::Vector{Int32} = [1]
+    x_weight = [1]
     for i in 2:length(x_sorted)
         if x_sorted[i] == x_sorted[i-1]
             x_weight[end] += 1
@@ -58,27 +58,32 @@ function partition(x::Vector{<:Real}; kwargs...)
         end
     end
 
-    partition(x_unique, x_weight; kwargs...)
+    # candidate block edges: first point, midpoints, last point
+    edges = vcat(x_unique[1],
+                 (x_unique[1:end-1] .+ x_unique[2:end]) ./ 2,
+                 x_unique[end])
+
+    partition(edges, x_weight; kwargs...)
 end
 
 function partition(h::Histogram{<:Integer,1}; kwargs...)
-    v = collect(h.edges[1])
-    x_unique = [0.5 * (v[i] + v[i+1]) for i in 1:length(v) - 1]
-    x_weight::Vector{Int32} = h.weights
-
-    # delete empty bins
-    deleteat!(x_unique, findall(iszero, x_weight))
-    deleteat!(x_weight, findall(iszero, x_weight))
-
-    partition(x_unique, x_weight; kwargs...)
+    partition(collect(h.edges[1]), h.weights; kwargs...)
 end
 
-function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
+"""
+    partition(edges, counts; kwargs...)
+
+Return the optimal change points for data binned in cells. `edges` are the
+cell edges (one more than the number of cells) and `counts` the number of
+events in each cell. The keyword arguments are the same as for
+`partition(data; kwargs...)`.
+"""
+function partition(edges::Vector{<:Real}, counts::Vector{<:Integer};
                    logfitness::Symbol=:cash, logprior::Symbol=:p0,
                    gamma=0.01, p0=0.01, progress::Bool=false)
 
-    # final number of data points
-    N = length(x_unique)
+    # number of cells
+    N = length(counts)
 
     if logfitness == :cash
         logf = _logf_cash
@@ -99,14 +104,9 @@ function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
         error("$logprior function not defined!")
     end
 
-    # array of (all possible) block edges
-    edges = vcat(x_unique[1],
-                 (x_unique[1:end-1] .+ x_unique[2:end]) ./ 2,
-                 x_unique[end])
-
     # cumulative counts: cumw[k+1] - cumw[r] is the number of events in the
     # block spanning cells r to k
-    cumw = cumsum(vcat(0, x_weight))
+    cumw = cumsum(vcat(0, counts))
 
     # see Sec. 2.6 in [^1]
     best = Vector{Float64}(undef, N)
@@ -142,5 +142,6 @@ function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
     return edges[reverse(cp)]
 end
 
-# Cash statistic for a block with N_k events and width T_k (Eq. (19) in [^1])
-_logf_cash(N_k, T_k) = N_k * log(N_k / T_k)
+# Cash statistic for a block with N_k events and width T_k (Eq. (19) in [^1]).
+# An empty block has zero fitness.
+_logf_cash(N_k, T_k) = N_k == 0 ? 0.0 : N_k * log(N_k / T_k)

@@ -80,67 +80,67 @@ function partition(x_unique::Vector{<:Real}, x_weight::Vector{Int32};
     # final number of data points
     N = length(x_unique)
 
-    # pre-defined (log)fitness functions
-    logf_dict = Dict(
-        :cash => (N_k, T_k) -> N_k * log(N_k/T_k)
-    )
+    if logfitness == :cash
+        logf = _logf_cash
+    else
+        error("$logfitness function not defined!")
+    end
 
-    # pre-defined (log)prior distributions on Nblocks
-    logp_dict = Dict(
+    # (log)prior on the number of blocks, a constant added once per block
+    if logprior == :gamma
         # simple γ^Nblocks prior
-        :gamma => (γ=gamma) -> log(γ),
+        ncp_prior = log(gamma)
+    elseif logprior == :p0
         # Note that there was a mistake in this equation in the original Scargle
         # paper (the "log" was missing). The following corrected form is taken
         # from https://arxiv.org/abs/1304.2818
-        :p0    => (Np=N, p=p0) -> log(73.53 * p * Np^(-0.478)) - 4
-    )
-
-    # check input
-    !haskey(logf_dict, logfitness) && error("$logfitness function not defined!")
-    !haskey(logp_dict, logprior)   && error("$logprior function not defined!")
-
-    # save prior value for later computation
-    ncp_prior = logp_dict[logprior]()
+        ncp_prior = log(73.53 * p0 * N^(-0.478)) - 4
+    else
+        error("$logprior function not defined!")
+    end
 
     # array of (all possible) block edges
     edges = vcat(x_unique[1],
                  0.5f0(x_unique[1:end-1]+x_unique[2:end]),
                  x_unique[end])
 
-    # see Sec. 2.6 in [^1]
-    best = Vector{Float32}()
-    last = Vector{Int32}()
+    # cumulative counts: cumw[k+1] - cumw[r] is the number of events in the
+    # block spanning cells r to k
+    cumw = cumsum(vcat(0, x_weight))
 
-    # display progress bar for long computations
-    # total number of steps: ∑n(n-1) = N(N^2-1)/3
-    if progress && Sys.WORD_SIZE == 32
-        @warn "Progress bar not supported on 32-bit Julia, disabling"
-        progress = false
-    elseif progress
-        p = Progress(UInt(N*(N^2-1)/3), 2); m = 0
-    end
+    # see Sec. 2.6 in [^1]
+    best = Vector{Float64}(undef, N)
+    last_cp = Vector{Int}(undef, N)
+    A = Vector{Float64}(undef, N)
+
+    # display progress bar for long computations, total number of steps is
+    # ∑k = N(N+1)/2
+    p = Progress(N * (N + 1) ÷ 2; dt = 1, enabled = progress)
 
     for k in 1:N
-        # define nice alias to mimic the notation used in [^1]
-        F(r) = logf_dict[logfitness](cumsum(x_weight[r:k])[end], edges[k+1]-edges[r]) + ncp_prior
-
-        # compute all possible configurations (Eq. (8) in [^1])
-        A = [F(r) + (r == 1 ? 0 : best[r-1]) for r in 1:k]
+        # fitness of all configurations with the last block starting at
+        # cell r (Eq. (8) in [^1])
+        for r in 1:k
+            A[r] = logf(cumw[k+1] - cumw[r], edges[k+1] - edges[r]) + ncp_prior +
+                   (r == 1 ? 0.0 : best[r-1])
+        end
 
         # save best configuration
-        push!(last, argmax(A))
-        push!(best, maximum(A))
+        best[k], last_cp[k] = findmax(view(A, 1:k))
 
-        progress && update!(p, m += k*(k-1))
+        update!(p, k * (k + 1) ÷ 2)
     end
 
     # extract changepoints by iteratively peeling off the last block
-    cp = Vector{Int32}()
-    i = N+1
+    cp = Int[]
+    i = N + 1
     while i != 0
         push!(cp, i)
-        i = (i == 1 ? 0 : last[i-1])
+        i = (i == 1 ? 0 : last_cp[i-1])
     end
 
-    return [edges[j] for j in cp[end:-1:1]]
+    return edges[reverse(cp)]
 end
+
+# Cash statistic for a block with N_k events and width T_k (Eq. (19) in [^1])
+_logf_cash(N_k, T_k) = N_k * log(N_k / T_k)

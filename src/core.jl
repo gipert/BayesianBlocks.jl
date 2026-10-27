@@ -3,26 +3,33 @@
 using StatsBase, ProgressMeter
 
 """
-    partition(data, logfitness=:cash, logprior=:p0, progress=false, ...)
+    partition(data; logfitness=:cash, logprior=:p0, gamma=0.01, p0=0.01, progress=false)
+    partition(edges, counts; kwargs...)
 
-Return an array of optimal change points for a set of one-dimensional data
-(observations or an histogram of them). This is the implementation of the
-bayesian blocks algorithm, as outlined in [^1].
+Return the optimal block edges for one-dimensional data, following the
+Bayesian Blocks algorithm of [^1].
 
-# Arguments
-- `data`: numeric array or a `StatsBase.Histogram`
-- `logfitness`: log of the block fitness function to be used, choose between
-  [:cash]
-- `logprior`: log of the prior distribution on the number of blocks to be used,
-   choose between [:gamma, :p0]
-- `gamma`, `p0`...: set the parameter value for the specified prior distribution
+`data` is a vector of observations (for instance event times or energies) or a
+`StatsBase.Histogram` of them. Binned data can also be given as the cell
+`edges` (one more than the number of cells) and the event `counts` in each
+cell. For raw observations the candidate block edges are the midpoints between
+neighboring distinct values, for binned data they are the bin edges.
+
+# Keyword arguments
+- `logfitness`: log of the block fitness function, `:cash` (Cash statistic for
+  Poisson counts)
+- `logprior`: log of the prior on the number of blocks, `:p0` (false alarm
+  probability `p0`) or `:gamma` (geometric prior with ratio `gamma`)
+- `gamma`, `p0`: parameter of the chosen prior
 - `progress`: display a progress bar for long computations
+
+The run time grows with the square of the number of distinct values or bins.
 
 # Example
 ```julia
 using Distributions, StatsBase, Plots, LinearAlgebra
 
-data = vcat(rand(Normal(0),1000),rand(Cauchy(5),1000))
+data = vcat(rand(Normal(0), 1000), rand(Cauchy(5), 1000))
 data = data[(data .> -5) .& (data .< 10)]
 
 h = fit(Histogram, data, -5:0.1:10)
@@ -35,14 +42,7 @@ plot(data, normalized=true, st=:stephist, nbins=1000)
 plot!(normalize(hb), st=:step, w = 3)
 ```
 
-## Performance tips
-You can convert your data container to a less precise representation to improve
-the performance a bit, e.g.
-```julia
-x::Array{Float32} = [1.1, π, (√5-1)/2]
-```
-
-[^1]: Scargle, J et al. (2012) [https://doi.org/10.1088/0004-637X/764/2/167]
+[^1]: Scargle, J. D. et al. (2013), ApJ 764, 167, [doi:10.1088/0004-637X/764/2/167](https://doi.org/10.1088/0004-637X/764/2/167)
 """
 function partition(x::AbstractVector{<:Real}; kwargs...)
     isempty(x) && throw(ArgumentError("data is empty"))
@@ -74,14 +74,6 @@ function partition(h::Histogram{<:Integer,1}; kwargs...)
     partition(collect(h.edges[1]), h.weights; kwargs...)
 end
 
-"""
-    partition(edges, counts; kwargs...)
-
-Return the optimal change points for data binned in cells. `edges` are the
-cell edges (one more than the number of cells) and `counts` the number of
-events in each cell. The keyword arguments are the same as for
-`partition(data; kwargs...)`.
-"""
 function partition(edges::AbstractVector{<:Real}, counts::AbstractVector{<:Integer};
                    logfitness::Symbol=:cash, logprior::Symbol=:p0,
                    gamma=0.01, p0=0.01, progress::Bool=false)

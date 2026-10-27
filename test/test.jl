@@ -5,7 +5,7 @@ using StatsBase
 using DelimitedFiles
 using Test
 
-data = readdlm("data/test.dat")[:,1]
+data = readdlm(joinpath(@__DIR__, "data", "test.dat"))[:,1]
 
 @test_throws MethodError BayesianBlocks.partition(fit(Histogram{Float64}, data), progress=true)
 

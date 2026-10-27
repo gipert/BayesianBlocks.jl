@@ -44,7 +44,10 @@ x::Array{Float32} = [1.1, π, (√5-1)/2]
 
 [^1]: Scargle, J et al. (2012) [https://doi.org/10.1088/0004-637X/764/2/167]
 """
-function partition(x::Vector{<:Real}; kwargs...)
+function partition(x::AbstractVector{<:Real}; kwargs...)
+    isempty(x) && throw(ArgumentError("data is empty"))
+    any(isnan, x) && throw(ArgumentError("data contains NaN"))
+
     # take care of repeated data
     x_sorted = sort(x)
     x_unique = [x_sorted[1]]
@@ -57,6 +60,7 @@ function partition(x::Vector{<:Real}; kwargs...)
             push!(x_weight, 1)
         end
     end
+    length(x_unique) < 2 && throw(ArgumentError("data has fewer than two distinct values"))
 
     # candidate block edges: first point, midpoints, last point
     edges = vcat(x_unique[1],
@@ -78,17 +82,21 @@ cell edges (one more than the number of cells) and `counts` the number of
 events in each cell. The keyword arguments are the same as for
 `partition(data; kwargs...)`.
 """
-function partition(edges::Vector{<:Real}, counts::Vector{<:Integer};
+function partition(edges::AbstractVector{<:Real}, counts::AbstractVector{<:Integer};
                    logfitness::Symbol=:cash, logprior::Symbol=:p0,
                    gamma=0.01, p0=0.01, progress::Bool=false)
 
     # number of cells
     N = length(counts)
+    N > 0 || throw(ArgumentError("counts is empty"))
+    length(edges) == N + 1 || throw(ArgumentError("edges must have one element more than counts"))
+    all(i -> edges[i] < edges[i+1], 1:N) || throw(ArgumentError("edges must be strictly increasing"))
+    any(<(0), counts) && throw(ArgumentError("counts must be non-negative"))
 
     if logfitness == :cash
         logf = _logf_cash
     else
-        error("$logfitness function not defined!")
+        throw(ArgumentError("unknown log-fitness function :$logfitness"))
     end
 
     # (log)prior on the number of blocks, a constant added once per block
@@ -101,7 +109,7 @@ function partition(edges::Vector{<:Real}, counts::Vector{<:Integer};
         # from https://arxiv.org/abs/1304.2818
         ncp_prior = log(73.53 * p0 * N^(-0.478)) - 4
     else
-        error("$logprior function not defined!")
+        throw(ArgumentError("unknown log-prior :$logprior"))
     end
 
     # cumulative counts: cumw[k+1] - cumw[r] is the number of events in the

@@ -50,3 +50,18 @@ h32 = fit(Histogram{Int32}, data, -4:0.1:10)
 w = copy(h32.weights)
 BayesianBlocks.partition(h32)
 @test h32.weights == w
+
+# any real vector is accepted
+@test BayesianBlocks.partition(view(data, 1:500)) == BayesianBlocks.partition(data[1:500])
+@test eltype(BayesianBlocks.partition(Float32.(data))) == Float32
+@test BayesianBlocks.partition(h) == BayesianBlocks.partition(collect(h.edges[1]), Int.(h.weights))
+
+# invalid input
+@test_throws ArgumentError BayesianBlocks.partition(Float64[])
+@test_throws ArgumentError BayesianBlocks.partition([1.0, NaN])
+@test_throws ArgumentError BayesianBlocks.partition([1.0, 1.0])
+@test_throws ArgumentError BayesianBlocks.partition([1.0, 2.0], [1, 2])
+@test_throws ArgumentError BayesianBlocks.partition([1.0, 2.0, 2.0], [1, 2])
+@test_throws ArgumentError BayesianBlocks.partition([1.0, 2.0, 3.0], [1, -2])
+@test_throws ArgumentError BayesianBlocks.partition(data, logfitness=:foo)
+@test_throws ArgumentError BayesianBlocks.partition(data, logprior=:foo)
